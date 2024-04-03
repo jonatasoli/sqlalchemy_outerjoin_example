@@ -12,6 +12,7 @@ pydantic = "^2.6.4"
 alembic = "^1.13.1"
 pyright = "^1.1.356"
 psycopg2-binary = "^2.9.9"
+ipdb = "^0.13.13"
 
 
 [build-system]

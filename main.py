@@ -1,13 +1,14 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List
-from pydantic import BaseModel, parse_obj_as
+from pydantic import BaseModel, ConfigDict, TypeAdapter, parse_obj_as
 
 from sqlalchemy import ForeignKey, create_engine, func, select
 from sqlalchemy.orm import (
     DeclarativeBase,
     backref,
     Mapped,
+    lazyload,
     mapped_column,
     relationship,
     sessionmaker,
@@ -42,7 +43,7 @@ class ProductDB(Base):
     )
     inventory = relationship(
         'InventoryDB',
-        backref=backref('ProductDB', uselist=False),
+        backref=backref('ProductDB', uselist=True),
         cascade='all,delete',
         foreign_keys=[product_id],
         primaryjoin='ProductDB.product_id == InventoryDB.product_id',
@@ -61,7 +62,10 @@ class ProductInDB(BaseModel):
     name: str
     price: Decimal
     category_id: int
-    quantity: int
+    available_quantity: int
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 def get_session():
     sqlalchemy_database_url = 'postgresql://postgres_user:pass123@localhost/dummy'
@@ -83,22 +87,21 @@ if __name__ == "__main__":
             ProductDB.name,
             ProductDB.price,
             func.coalesce(func.sum(InventoryDB.quantity), 0).label(
-                'quantity',
+                'available_quantity',
             ),
         )
-        .outerjoin(
-            CategoryDB,
-            CategoryDB.category_id == ProductDB.category_id,
-        )
+        .options(lazyload('*'))
         .outerjoin(
             InventoryDB,
             ProductDB.product_id == InventoryDB.product_id,
         )
-        .group_by(ProductDB.product_id, CategoryDB.category_id)
+        .group_by(ProductDB.product_id)
     )
     db = get_session()
     with db() as session:
         products_db = session.scalars(quantity_query)
-    import ipdb; ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
+        adapter = TypeAdapter(List[ProductInDB])
 
-    pydantic_object =  parse_obj_as(List[ProductInDB], products_db.all())
+        pydantic_object =  adapter.validate_python(products_db.all())
+        print(pydantic_object)
